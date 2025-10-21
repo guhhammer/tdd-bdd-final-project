@@ -15,11 +15,12 @@
 ######################################################################
 
 # spell: ignore Rofrano jsonify restx dbname
+
 """
 Product Store Service with UI
 """
-from flask import jsonify, request, abort
-from flask import url_for  # noqa: F401 pylint: disable=unused-import
+
+from flask import jsonify, request, abort, url_for
 from service.models import Product
 from service.common import status  # HTTP Status Codes
 from . import app
@@ -44,7 +45,7 @@ def index():
 
 
 ######################################################################
-#  U T I L I T Y   F U N C T I O N S
+# U T I L I T Y   F U N C T I O N S
 ######################################################################
 def check_content_type(content_type):
     """Checks that the media type is correct"""
@@ -55,14 +56,12 @@ def check_content_type(content_type):
             f"Content-Type must be {content_type}",
         )
 
-    if request.headers["Content-Type"] == content_type:
-        return
-
-    app.logger.error("Invalid Content-Type: %s", request.headers["Content-Type"])
-    abort(
-        status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-        f"Content-Type must be {content_type}",
-    )
+    if request.headers["Content-Type"] != content_type:
+        app.logger.error("Invalid Content-Type: %s", request.headers["Content-Type"])
+        abort(
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            f"Content-Type must be {content_type}",
+        )
 
 
 ######################################################################
@@ -72,13 +71,14 @@ def check_content_type(content_type):
 def create_products():
     """
     Creates a Product
-    This endpoint will create a Product based the data in the body that is posted
+    This endpoint will create a Product based on the data in the body that is posted.
     """
     app.logger.info("Request to Create a Product...")
     check_content_type("application/json")
 
     data = request.get_json()
     app.logger.info("Processing: %s", data)
+
     product = Product()
     product.deserialize(data)
     product.create()
@@ -86,43 +86,89 @@ def create_products():
 
     message = product.serialize()
 
-    #
-    # Uncomment this line of code once you implement READ A PRODUCT
-    #
-    # location_url = url_for("get_products", product_id=product.id, _external=True)
-    location_url = "/"  # delete once READ is implemented
+    location_url = url_for("get_products", product_id=product.id, _external=True)
+    location_url = "/"  # Placeholder until READ is implemented
     return jsonify(message), status.HTTP_201_CREATED, {"Location": location_url}
 
 
 ######################################################################
 # L I S T   A L L   P R O D U C T S
 ######################################################################
+@app.route("/products")
+def list_products():
+    """List Products, optionally filtered by category, availability, or name"""
+    products = Product.all()  # default: all products
 
-#
-# PLACE YOUR CODE TO LIST ALL PRODUCTS HERE
-#
+    # Filter by category
+    category_param = request.args.get("category")
+    if category_param:
+        from service.models import Category
+        try:
+            category_enum = Category[category_param.upper()]
+        except KeyError:
+            category_enum = Category.UNKNOWN
+        products = Product.find_by_category(category_enum)
+
+    # Filter by availability
+    available_param = request.args.get("available")
+    if available_param is not None:
+        products = Product.find_by_availability(available_param.lower() == "true")
+
+    # Filter by name
+    name_param = request.args.get("name")
+    if name_param:
+        products = Product.find_by_name(name_param)
+
+    return jsonify([p.serialize() for p in products]), status.HTTP_200_OK
+
 
 ######################################################################
 # R E A D   A   P R O D U C T
 ######################################################################
+@app.route("/products/<int:product_id>", methods=["GET"])
+def get_products(product_id):
+    """Retrieve a single Product by ID"""
+    app.logger.info("Request to read Product with id: %s", product_id)
 
-#
-# PLACE YOUR CODE HERE TO READ A PRODUCT
-#
+    product = Product.find(product_id)
+    if not product:
+        abort(status.HTTP_404_NOT_FOUND, f"Product with id '{product_id}' was not found.")
+    return jsonify(product.serialize()), status.HTTP_200_OK
+
+    abort(status.HTTP_501_NOT_IMPLEMENTED, "Read product not implemented yet.")
+
 
 ######################################################################
 # U P D A T E   A   P R O D U C T
 ######################################################################
+@app.route("/products/<int:product_id>", methods=["PUT"])
+def update_products(product_id):
+    """Update an existing Product"""
+    app.logger.info("Request to update Product with id: %s", product_id)
+    check_content_type("application/json")
 
-#
-# PLACE YOUR CODE TO UPDATE A PRODUCT HERE
-#
+    product = Product.find(product_id)
+    if not product:
+        abort(status.HTTP_404_NOT_FOUND, f"Product with id '{product_id}' was not found.")
+    data = request.get_json()
+    product.deserialize(data)
+    product.update()
+    return jsonify(product.serialize()), status.HTTP_200_OK
+
+    abort(status.HTTP_501_NOT_IMPLEMENTED, "Update product not implemented yet.")
+
 
 ######################################################################
 # D E L E T E   A   P R O D U C T
 ######################################################################
+@app.route("/products/<int:product_id>", methods=["DELETE"])
+def delete_products(product_id):
+    """Delete a Product"""
+    app.logger.info("Request to delete Product with id: %s", product_id)
 
+    product = Product.find(product_id)
+    if product:
+        product.delete()
+    return "", status.HTTP_204_NO_CONTENT
 
-#
-# PLACE YOUR CODE TO DELETE A PRODUCT HERE
-#
+    abort(status.HTTP_501_NOT_IMPLEMENTED, "Delete product not implemented yet.")
